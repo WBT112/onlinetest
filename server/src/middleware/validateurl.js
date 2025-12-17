@@ -24,7 +24,7 @@ export const validateURL = (request, response, next) => {
   }
 
   if (url) {
-    if (url != 'undefined' && !url.includes('http')) {
+    if (url != 'undefined' && !/^https?:\/\//i.test(url)) {
       url = 'https://' + url;
     }
 
