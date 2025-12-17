@@ -28,6 +28,13 @@ export const validateURL = (request, response, next) => {
       url = 'https://' + url;
     }
 
+    if (url && url !== 'undefined') {
+      request.body.url = url;
+      if (Array.isArray(request.body._) && request.body._.length) {
+        request.body._[0] = url;
+      }
+    }
+
     if (url === 'undefined' || !isURL(url)) {
       logger.error('Non valid URL %s', url);
       request.inputValidationError = getText('error.urlnotvalid', url);
