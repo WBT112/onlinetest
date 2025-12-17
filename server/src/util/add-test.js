@@ -24,6 +24,13 @@ import { updateStatus } from '../database/index.js';
 
 const logger = getLogger('sitespeedio.server');
 
+function normalizeUrl(url) {
+  if (!url || url === 'undefined') {
+    return url;
+  }
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
 async function getDefaultSitespeedConfiguration() {
   if (nconf.get('defaultSitespeedioConfigFile')) {
     const result = await readFile(
@@ -44,6 +51,7 @@ function getQueueName(location, deviceId) {
 
 export async function reRunTest(request) {
   let { id, label, url } = request.body;
+  url = normalizeUrl(url);
 
   /*
   if (url) {
@@ -144,6 +152,7 @@ export async function addTest(request) {
     cruxKey,
     lighthouse: useLighthouse
   } = request.body;
+  url = normalizeUrl(url);
 
   const defaultConfig = await getDefaultSitespeedConfiguration();
 
@@ -263,6 +272,7 @@ export async function addTestFromAPI(
   priority,
   dockerContainer
 ) {
+  url = normalizeUrl(url);
   // The number of objects to keep in the queue before removal
   const removeOnComplete = nconf.get('queue:removeOnComplete') || 200;
   const removeOnFail = nconf.get('queue:removeOnFail') || 400;
