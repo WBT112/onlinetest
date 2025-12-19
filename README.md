@@ -4,7 +4,7 @@
 [![Lint](https://github.com/WBT112/onlinetest/actions/workflows/lint.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/lint.yml?query=branch:tests)
 [![CVE Scan](https://github.com/WBT112/onlinetest/actions/workflows/cve-scan.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/cve-scan.yml?query=branch:tests)
 
-[CVE report](https://github.com/WBT112/onlinetest/blob/tests/reports/cve-latest.md)
+[CVE report for container Images](https://github.com/WBT112/onlinetest/blob/tests/reports/cve-latest.md)
 
 [Website](https://www.sitespeed.io/) | [Documentation](https://www.sitespeed.io/documentation/onlinetest/) | [Changelog server](https://github.com/sitespeedio/onlinetest/blob/main/server/CHANGELOG.md) | [Changelog testrunner](https://github.com/sitespeedio/onlinetest/blob/main/testrunner/CHANGELOG.md) | [Bluesky](https://bsky.app/profile/sitespeed.io) | [Mastodon](https://fosstodon.org/@sitespeedio)
 
