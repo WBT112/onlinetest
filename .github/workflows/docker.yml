@@ -67,7 +67,7 @@ jobs:
     - name: Extract test id
       run: |
         for i in {1..30}; do
-          TEST_ID=$(node -e "const fs=require('fs'); const data=fs.readFileSync('server.log','utf8'); const matches=[...data.matchAll(/Adding test with id (\\d+)/g)]; if(matches.length){process.stdout.write(matches[matches.length-1][1]);}")
+          TEST_ID=$(node -e "const fs=require('fs'); const data=fs.readFileSync('server.log','utf8'); const matches=[...data.matchAll(/Adding test with id ([0-9a-f-]{36})/gi)]; if(matches.length){process.stdout.write(matches[matches.length-1][1]);}")
           if [ -n "$TEST_ID" ]; then
             echo "TEST_ID=$TEST_ID" >> $GITHUB_ENV
             exit 0
