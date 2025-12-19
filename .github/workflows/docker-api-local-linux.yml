@@ -58,8 +58,16 @@ jobs:
         bin/sitespeed.js https://www.wikipedia.org -n 1 --api.hostname 127.0.0.1  --api.location default --headless --api.json --s3.endpoint "http://${{ env.HOST_IP }}:9000" 2>&1 | tee ../api-response.log
     - name: Extract test id
       run: |
-        TEST_ID=$(docker logs onlinetest-sitespeed.io-server-1 2>&1 | node -e "const fs=require('fs'); const data=fs.readFileSync(0,'utf8'); const matches=[...data.matchAll(/Adding test with id (\\d+)/g)]; if(!matches.length){console.error('No test id found in docker logs'); process.exit(1);} process.stdout.write(matches[matches.length-1][1]);")
-        echo "TEST_ID=$TEST_ID" >> $GITHUB_ENV
+        for i in {1..30}; do
+          TEST_ID=$(docker logs onlinetest-sitespeed.io-server-1 2>&1 | node -e "const fs=require('fs'); const data=fs.readFileSync(0,'utf8'); const matches=[...data.matchAll(/Adding test with id (\\d+)/g)]; if(matches.length){process.stdout.write(matches[matches.length-1][1]);}")
+          if [ -n "$TEST_ID" ]; then
+            echo "TEST_ID=$TEST_ID" >> $GITHUB_ENV
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "No test id found in docker logs"
+        exit 1
     - name: Verify test runner is registered
       run: |
         for i in {1..10}; do
