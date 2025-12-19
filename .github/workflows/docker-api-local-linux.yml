@@ -29,17 +29,18 @@ jobs:
     - name: API validation checks
       run: |
         set -e
+        curl_opts="--retry 15 --retry-all-errors --retry-delay 2 --connect-timeout 2 --max-time 10"
         for i in {1..30}; do
-          if curl -s -o /dev/null http://127.0.0.1:3000/api; then
+          if curl $curl_opts -s -o /dev/null http://127.0.0.1:3000/api; then
             ready=1
             break
           fi
           sleep 2
         done
         [ "${ready:-0}" -eq 1 ]
-        missing_status=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST http://127.0.0.1:3000/api/add -d '{"_":["https://www.wikipedia.org"],"api":{"testType":"desktop"}}')
+        missing_status=$(curl $curl_opts -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST http://127.0.0.1:3000/api/add -d '{"_":["https://www.wikipedia.org"],"api":{"testType":"desktop"}}')
         [ "$missing_status" -eq 400 ]
-        invalid_status=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST http://127.0.0.1:3000/api/add -d '{"_":["notaurl"],"api":{"location":"default","testType":"desktop"}}')
+        invalid_status=$(curl $curl_opts -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST http://127.0.0.1:3000/api/add -d '{"_":["notaurl"],"api":{"location":"default","testType":"desktop"}}')
         [ "$invalid_status" -eq 400 ]
     - name: Show versions
       run: |
