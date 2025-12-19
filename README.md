@@ -1,10 +1,10 @@
-[![Test the API](https://github.com/sitespeedio/onlinetest/actions/workflows/api.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/api.yml)
-[![Test the GUI](https://github.com/sitespeedio/onlinetest/actions/workflows/gui.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/gui.yml)
-[![Using Docker](https://github.com/sitespeedio/onlinetest/actions/workflows/docker.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/docker.yml)
-[![Lint](https://github.com/sitespeedio/onlinetest/actions/workflows/lint.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/lint.yml)
-[![CVE Scan](https://github.com/sitespeedio/onlinetest/actions/workflows/cve-scan.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/cve-scan.yml)
+[![Test the API](https://github.com/WBT112/onlinetest/actions/workflows/api.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/api.yml?query=branch:tests)
+[![Test the GUI (NodeJS)](https://github.com/WBT112/onlinetest/actions/workflows/nodejs-gui.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/nodejs-gui.yml?query=branch:tests) [![Test the GUI (Docker)](https://github.com/WBT112/onlinetest/actions/workflows/docker-gui.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/docker-gui.yml?query=branch:tests)
+[![Using Docker](https://github.com/WBT112/onlinetest/actions/workflows/docker.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/docker.yml?query=branch:tests)
+[![Lint](https://github.com/WBT112/onlinetest/actions/workflows/lint.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/lint.yml?query=branch:tests)
+[![CVE Scan](https://github.com/WBT112/onlinetest/actions/workflows/cve-scan.yml/badge.svg?branch=tests)](https://github.com/WBT112/onlinetest/actions/workflows/cve-scan.yml?query=branch:tests)
 
-[CVE report](reports/cve-latest.md)
+[CVE report](https://github.com/WBT112/onlinetest/blob/tests/reports/cve-latest.md)
 
 [Website](https://www.sitespeed.io/) | [Documentation](https://www.sitespeed.io/documentation/onlinetest/) | [Changelog server](https://github.com/sitespeedio/onlinetest/blob/main/server/CHANGELOG.md) | [Changelog testrunner](https://github.com/sitespeedio/onlinetest/blob/main/testrunner/CHANGELOG.md) | [Bluesky](https://bsky.app/profile/sitespeed.io) | [Mastodon](https://fosstodon.org/@sitespeedio)
 
