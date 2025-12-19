@@ -34,6 +34,13 @@ jobs:
       run: |
         npm install --prefix testrunner
         node testrunner/app.js > testrunner.log 2>&1 &
+    - name: API validation checks
+      run: |
+        set -e
+        missing_status=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST http://127.0.0.1:3000/api/add -d '{"_":["https://www.wikipedia.org"],"api":{"testType":"desktop"}}')
+        [ "$missing_status" -eq 400 ]
+        invalid_status=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -X POST http://127.0.0.1:3000/api/add -d '{"_":["notaurl"],"api":{"location":"default","testType":"desktop"}}')
+        [ "$invalid_status" -eq 400 ]
     - name: Install sitespeed.io globally
       run: npm install sitespeed.io -g
     - name: Show versions
@@ -45,7 +52,52 @@ jobs:
         git clone https://github.com/sitespeedio/sitespeed.io.git
         cd sitespeed.io
         npm install
-        bin/sitespeed.js https://www.wikipedia.org -n 1 --api.hostname 127.0.0.1  --api.location default --headless --api.json
+        bin/sitespeed.js https://www.wikipedia.org -n 1 --api.hostname 127.0.0.1  --api.location default --headless --api.json 2>&1 | tee ../api-response.log
+    - name: Extract test id
+      run: |
+        TEST_ID=$(node -e "const fs=require('fs'); const data=fs.readFileSync('api-response.log','utf8'); const match=data.match(/\\\"id\\\"\\s*:\\s*\\\"?(\\d+)\\\"?/); if(!match){console.error('No test id found'); process.exit(1);} process.stdout.write(match[1]);")
+        echo "TEST_ID=$TEST_ID" >> $GITHUB_ENV
+    - name: Verify test runner is registered
+      run: |
+        for i in {1..10}; do
+          count=$(curl -s http://127.0.0.1:3000/api/testRunners | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(String(Array.isArray(data) ? data.length : 0));")
+          if [ "$count" -gt 0 ]; then
+            exit 0
+          fi
+          sleep 3
+        done
+        echo "No test runner registered"
+        exit 1
+    - name: Wait for test completion
+      run: |
+        for i in {1..60}; do
+          status_json=$(curl -s http://127.0.0.1:3000/api/status/${TEST_ID})
+          status=$(echo "$status_json" | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(data.status || '');")
+          echo "status=$status"
+          if [ "$status" = "completed" ]; then
+            result=$(echo "$status_json" | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(data.result || '');")
+            echo "RESULT_URL=$result" >> $GITHUB_ENV
+            exit 0
+          fi
+          if [ "$status" = "failed" ]; then
+            echo "$status_json"
+            exit 1
+          fi
+          sleep 10
+        done
+        echo "Timed out waiting for test completion"
+        exit 1
+    - name: Verify result URL is reachable
+      run: |
+        if [ -z "$RESULT_URL" ]; then
+          echo "Missing RESULT_URL"
+          exit 1
+        fi
+        curl -f -I "$RESULT_URL"
+    - name: Verify HAR is available
+      run: |
+        curl -s -f http://127.0.0.1:3000/api/har/${TEST_ID} > har.json
+        node -e "const fs=require('fs'); const har=JSON.parse(fs.readFileSync('har.json','utf8')); if(!har.log || !Array.isArray(har.log.entries)) { throw new Error('Invalid HAR'); }"
     - name: Display Server log
       if: failure() || success()
       run: cat server.log
