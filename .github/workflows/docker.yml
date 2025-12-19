@@ -45,6 +45,17 @@ jobs:
     - name: Show versions
       run: |
         docker --version
+    - name: Wait for test runner registration
+      run: |
+        for i in {1..20}; do
+          count=$(curl -s http://127.0.0.1:3000/api/testRunners | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(String(Array.isArray(data) ? data.length : 0));")
+          if [ "$count" -gt 0 ]; then
+            exit 0
+          fi
+          sleep 3
+        done
+        echo "No test runner registered"
+        exit 1
     - name: Get host IP
       run: echo "HOST_IP=$(hostname -I | awk '{print $1}')" >> $GITHUB_ENV
     - name: Run a test
@@ -64,17 +75,6 @@ jobs:
           sleep 2
         done
         echo "No test id found in server.log"
-        exit 1
-    - name: Verify test runner is registered
-      run: |
-        for i in {1..10}; do
-          count=$(curl -s http://127.0.0.1:3000/api/testRunners | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(String(Array.isArray(data) ? data.length : 0));")
-          if [ "$count" -gt 0 ]; then
-            exit 0
-          fi
-          sleep 3
-        done
-        echo "No test runner registered"
         exit 1
     - name: Wait for test completion
       run: |
