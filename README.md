@@ -2,6 +2,9 @@
 [![Test the GUI](https://github.com/sitespeedio/onlinetest/actions/workflows/gui.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/gui.yml)
 [![Using Docker](https://github.com/sitespeedio/onlinetest/actions/workflows/docker.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/docker.yml)
 [![Lint](https://github.com/sitespeedio/onlinetest/actions/workflows/lint.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/lint.yml)
+[![CVE Scan](https://github.com/sitespeedio/onlinetest/actions/workflows/cve-scan.yml/badge.svg)](https://github.com/sitespeedio/onlinetest/actions/workflows/cve-scan.yml)
+
+[CVE report](reports/cve-latest.md)
 
 [Website](https://www.sitespeed.io/) | [Documentation](https://www.sitespeed.io/documentation/onlinetest/) | [Changelog server](https://github.com/sitespeedio/onlinetest/blob/main/server/CHANGELOG.md) | [Changelog testrunner](https://github.com/sitespeedio/onlinetest/blob/main/testrunner/CHANGELOG.md) | [Bluesky](https://bsky.app/profile/sitespeed.io) | [Mastodon](https://fosstodon.org/@sitespeedio)
 
