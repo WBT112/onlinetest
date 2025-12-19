@@ -54,7 +54,7 @@ jobs:
         bin/sitespeed.js https://www.wikipedia.org -n 1 --api.hostname 127.0.0.1  --api.location docker --headless --api.json --s3.endpoint "http://${{ env.HOST_IP }}:9000" 2>&1 | tee ../api-response.log
     - name: Extract test id
       run: |
-        TEST_ID=$(node -e "const fs=require('fs'); const data=fs.readFileSync('api-response.log','utf8'); const match=data.match(/\\\"id\\\"\\s*:\\s*\\\"?(\\d+)\\\"?/); if(!match){console.error('No test id found'); process.exit(1);} process.stdout.write(match[1]);")
+        TEST_ID=$(node -e "const fs=require('fs'); const data=fs.readFileSync('server.log','utf8'); const matches=[...data.matchAll(/Adding test with id (\\d+)/g)]; if(!matches.length){console.error('No test id found in server.log'); process.exit(1);} process.stdout.write(matches[matches.length-1][1]);")
         echo "TEST_ID=$TEST_ID" >> $GITHUB_ENV
     - name: Verify test runner is registered
       run: |
