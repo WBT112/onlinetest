@@ -1,4 +1,8 @@
 FROM node:24-slim
+
+RUN apt-get update && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /usr/src/app
 
 COPY package.json npm-shrinkwrap.json ./
