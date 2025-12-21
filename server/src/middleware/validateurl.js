@@ -31,7 +31,7 @@ export const validateURL = (request, response, next) => {
     // Persist normalized URL so the queued job/testrunner always receives a schema-prefixed URL
     if (url && url !== 'undefined') {
       request.body.url = url;
-      if (Array.isArray(request.body._) && request.body._.length) {
+      if (Array.isArray(request.body._) && request.body._.length > 0) {
         request.body._[0] = url;
       }
     }
