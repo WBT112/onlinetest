@@ -11,6 +11,7 @@ services:
       database_password: ${POSTGRES_PASSWORD}
       database_port: 5432
       validTestDomains: ${VALID_TEST_DOMAINS}
+      sitespeed.io_darkMode: ${SITESPEED_IO_DARKMODE}
     ports:
       - "3000:3000"
     networks:
