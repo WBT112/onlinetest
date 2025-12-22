@@ -49,6 +49,7 @@ search:
 html:
   css:
     override:
+  darkMode: false
   logo:
     path: "/img/logo.svg"
     width: 300

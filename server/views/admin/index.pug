@@ -20,7 +20,7 @@ html
           form.submit();
         }
       }
-  body
+  body(class=nconf.get('html:darkMode') ? 'theme-dark' : undefined)
     header
       h1 Admin
     main
