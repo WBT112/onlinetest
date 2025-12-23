@@ -2,7 +2,9 @@ doctype html
 html
   head
     title Queues Display
-    link(rel='stylesheet' href='/css/admin.css')
+    link(rel='stylesheet' href='/css/extra.css')
+    if (nconf.get('html:darkMode'))
+      link(rel='stylesheet' href='/css/theme-dark.css')
     script.
       function confirmAndSubmit(queue) {
         if (confirm(`Are you sure you want to empty the queue: ${queue}?`)) {
@@ -20,7 +22,7 @@ html
           form.submit();
         }
       }
-  body(class=nconf.get('html:darkMode') ? 'theme-dark' : undefined)
+  body(class=[nconf.get('html:darkMode') ? 'theme-dark' : null, 'admin-ui'])
     header
       h1 Admin
     main
