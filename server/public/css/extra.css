@@ -19,3 +19,54 @@ footer {
 td.run-date {
   white-space: nowrap;
 }
+
+body.admin-ui {
+  background-color: #0095d2;
+  color: #1c1c1c;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  margin: 0;
+}
+
+body.admin-ui header,
+body.admin-ui footer {
+  background-color: #e1f6fd;
+  padding: 16px 24px;
+}
+
+body.admin-ui header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+body.admin-ui main {
+  padding: 24px;
+}
+
+body.admin-ui .container {
+  background-color: #ffffff;
+  border: 1px solid #cfeaf5;
+  border-radius: 6px;
+  padding: 16px 20px;
+}
+
+body.admin-ui .key {
+  margin-bottom: 10px;
+}
+
+body.admin-ui button {
+  background-color: #0095d2;
+  border: 1px solid #0073b0;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 6px 12px;
+}
+
+body.admin-ui button:hover {
+  background-color: #0073b0;
+  border-color: #0073b0;
+}
+
+body.admin-ui a {
+  color: #00719f;
+}
