@@ -90,6 +90,9 @@ admin:
 
 # The default sitspeed.io configuration file that will be merged to all tests.
 # defaultSitespeedioConfigFile:
+sitespeed.io:
+  # Default dark mode for sitespeed.io HTML reports (env: SITESPEED_IO_DARKMODE)
+  darkMode: false
 
 # The number of jobs to keep in the queue
 # Depending on how many jobs you run and how much memory

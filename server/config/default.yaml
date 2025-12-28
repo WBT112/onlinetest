@@ -105,3 +105,5 @@ queue:
 # If you don't setup a default sitespeed.io configuration, you can add 
 # your sitespeed.io configuration directly in this block
 sitespeed.io:
+  # Default dark mode for sitespeed.io HTML reports (env: SITESPEED_IO_DARKMODE)
+  darkMode: false
