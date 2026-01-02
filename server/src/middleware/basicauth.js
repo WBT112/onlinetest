@@ -8,7 +8,13 @@ export class BasicAuth {
   }
 
   authenticate(request, response, next) {
-    if (this.skipURL && request.path.startsWith(this.skipURL)) {
+    const skipList = Array.isArray(this.skipURL)
+      ? this.skipURL
+      : this.skipURL
+        ? [this.skipURL]
+        : [];
+
+    if (skipList.some(prefix => request.path.startsWith(prefix))) {
       return next();
     }
 

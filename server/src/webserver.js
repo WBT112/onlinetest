@@ -69,7 +69,7 @@ function setupExpressServer() {
       basicAuthPassword,
       'Access to the site',
       'Authentication required.',
-      '/api/'
+      ['/api/', '/admin']
     );
 
     app.use((request, response, next) =>

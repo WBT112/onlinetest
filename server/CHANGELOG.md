@@ -12,6 +12,7 @@
 * Bump Postgres to latest version [#172](https://github.com/sitespeedio/onlinetest/pull/172)
 * Fix correct path to scripting file [#167](https://github.com/sitespeedio/onlinetest/pull/167).
 * Update to sitespeed.io 39 [#171](https://github.com/sitespeedio/onlinetest/pull/171).
+* Make admin basic auth work when global basic auth is enabled.
 
 ### Added
 * Docker containers now use NodeJS 24 [#173](https://github.com/sitespeedio/onlinetest/pull/173).

@@ -62,11 +62,12 @@ To control basic auth via Docker Compose, set these in `.env` (they are passed i
 ```
 BASIC_AUTH_LOGIN=
 BASIC_AUTH_PASSWORD=
-ADMIN_BASIC_AUTH_LOGIN=appojke
-ADMIN_BASIC_AUTH_PASSWORD=monkeyboy
+ADMIN_BASIC_AUTH_LOGIN=
+ADMIN_BASIC_AUTH_PASSWORD=
 ```
 
 Leave `BASIC_AUTH_LOGIN` and `BASIC_AUTH_PASSWORD` empty to keep the main GUI unauthenticated.
+The admin area uses its own `ADMIN_BASIC_AUTH_LOGIN` and `ADMIN_BASIC_AUTH_PASSWORD` and is not protected by the GUI credentials.
 
 ### Change which pages/URLs you can test
 There's a regular expression that validates the domain of the URL that you want to test. You can use this to make sure a public instance only can tests pages on your web sites.
