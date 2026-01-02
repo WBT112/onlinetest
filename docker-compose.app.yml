@@ -11,6 +11,10 @@ services:
       database_password: ${POSTGRES_PASSWORD}
       database_port: 5432
       validTestDomains: ${VALID_TEST_DOMAINS}
+      basicAuth_login: ${BASIC_AUTH_LOGIN}
+      basicAuth_password: ${BASIC_AUTH_PASSWORD}
+      admin_basicAuth_login: ${ADMIN_BASIC_AUTH_LOGIN}
+      admin_basicAuth_password: ${ADMIN_BASIC_AUTH_PASSWORD}
     ports:
       - "3000:3000"
     networks:

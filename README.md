@@ -56,6 +56,18 @@ You can configure everything that you are used to configure with sitespeed.io + 
 
 You can also use the **[.env](https://github.com/sitespeedio/onlinetest/blob/main/.env)** file for some common configuration to setup the server/testrunner.
 
+### Basic auth (Docker)
+To control basic auth via Docker Compose, set these in `.env` (they are passed into the server container by `docker-compose.app.yml`):
+
+```
+BASIC_AUTH_LOGIN=
+BASIC_AUTH_PASSWORD=
+ADMIN_BASIC_AUTH_LOGIN=appojke
+ADMIN_BASIC_AUTH_PASSWORD=monkeyboy
+```
+
+Leave `BASIC_AUTH_LOGIN` and `BASIC_AUTH_PASSWORD` empty to keep the main GUI unauthenticated.
+
 ### Change which pages/URLs you can test
 There's a regular expression that validates the domain of the URL that you want to test. You can use this to make sure a public instance only can tests pages on your web sites.
 

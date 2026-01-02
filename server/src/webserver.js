@@ -28,6 +28,9 @@ import { getBaseFilePath } from './util/fileutil.js';
 
 const logger = getLogger('sitespeedio.server');
 
+const hasValue = value =>
+  typeof value === 'string' && value.trim().length > 0;
+
 function setupExpressServer() {
   const app = express();
 
@@ -56,14 +59,14 @@ function setupExpressServer() {
     })
   );
 
-  if (
-    nconf.get('basicAuth:login') != undefined &&
-    nconf.get('basicAuth:password') != undefined
-  ) {
+  const basicAuthLogin = nconf.get('basicAuth:login');
+  const basicAuthPassword = nconf.get('basicAuth:password');
+
+  if (hasValue(basicAuthLogin) && hasValue(basicAuthPassword)) {
     logger.info('Setup basic auth');
     const genericAuth = new BasicAuth(
-      nconf.get('basicAuth:login'),
-      nconf.get('basicAuth:password'),
+      basicAuthLogin,
+      basicAuthPassword,
       'Access to the site',
       'Authentication required.',
       '/api/'
