@@ -28,6 +28,14 @@ export const validateURL = (request, response, next) => {
       url = 'https://' + url;
     }
 
+    // Persist normalized URL so the queued job/testrunner always receives a schema-prefixed URL
+    if (url && url !== 'undefined') {
+      request.body.url = url;
+      if (Array.isArray(request.body._) && request.body._.length > 0) {
+        request.body._[0] = url;
+      }
+    }
+
     if (url === 'undefined' || !isURL(url)) {
       logger.error('Non valid URL %s', url);
       request.inputValidationError = getText('error.urlnotvalid', url);
