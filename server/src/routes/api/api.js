@@ -5,7 +5,11 @@ import { createRequire } from 'node:module';
 
 import { getConfigByTestId } from '../../configs.js';
 import { getQueueById } from '../../queuehandler.js';
-import { getTest, getTestHar } from '../../database/index.js';
+import {
+  getTest,
+  getTestHar,
+  getTestBrowsertime
+} from '../../database/index.js';
 
 import { validateKey } from '../../middleware/validatekey.js';
 import { validateURL } from '../../middleware/validateurl.js';
@@ -47,9 +51,23 @@ api.get('/har/:testId', async function (request, response) {
   const har = await getTestHar(id);
   return har
     ? response.json(har.har)
-    : response.status(400).json({
+    : response.status(404).json({
         id: id,
         message: 'There are no HAR for test id ' + id
+      });
+});
+
+/**
+ * Get the browsertime result JSON for a completed test.
+ */
+api.get('/result/:testId', async function (request, response) {
+  const id = request.params.testId;
+  const row = await getTestBrowsertime(id);
+  return row
+    ? response.json(row.browsertime_result)
+    : response.status(404).json({
+        id: id,
+        message: 'There is no result for test id ' + id
       });
 });
 
@@ -128,7 +146,7 @@ api.get('/status/:testId', async function (request, response) {
       logger.info('Job %s completed for %s', id, testConfig.url);
 
       message = 'Job completed.';
-      resultUrl = job.returnvalue.pageSummaryUrl;
+      resultUrl = job.returnvalue?.pageSummaryUrl;
       break;
     }
     case 'active': {
