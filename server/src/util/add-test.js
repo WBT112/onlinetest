@@ -1,8 +1,9 @@
 import get from 'lodash.get';
 import path from 'node:path';
-import merge from 'lodash.merge';
 import nconf from 'nconf';
 import { readFile } from 'node:fs/promises';
+
+import { safeMerge } from './safemerge.js';
 
 import {
   uniqueNamesGenerator,
@@ -59,9 +60,9 @@ export async function reRunTest(request) {
 
   const queueName = getQueueName(oldTest.location, deviceId);
 
-  const removeOnComplete = nconf.get('queue:removeOnComplete') || 200;
-  const removeOnFail = nconf.get('queue:removeOnFail') || 400;
-  const attempts = nconf.get('queue:attempts') || 1;
+  const removeOnComplete = nconf.get('queue:removeOnComplete') || 50;
+  const removeOnFail = nconf.get('queue:removeOnFail') || 100;
+  const attempts = nconf.get('queue:attempts') || 2;
 
   if (queueName) {
     const testRunnerQueue = getExistingQueue(queueName);
@@ -145,9 +146,9 @@ export async function addTest(request) {
   const defaultConfig = await getDefaultSitespeedConfiguration();
 
   // The number of objects to keep in the queue before removal
-  const removeOnComplete = nconf.get('queue:removeOnComplete') || 200;
-  const removeOnFail = nconf.get('queue:removeOnFail') || 400;
-  const attempts = nconf.get('queue:attempts') || 1;
+  const removeOnComplete = nconf.get('queue:removeOnComplete') || 50;
+  const removeOnFail = nconf.get('queue:removeOnFail') || 100;
+  const attempts = nconf.get('queue:attempts') || 2;
   const userConfig = {
     browsertime: {
       browser,
@@ -167,7 +168,7 @@ export async function addTest(request) {
   }
 
   let config = {};
-  merge(config, defaultConfig, userConfig);
+  safeMerge(config, defaultConfig, userConfig);
 
   if (deviceId) {
     if (browser === 'chrome') {
@@ -237,7 +238,7 @@ export async function addTest(request) {
         `Setting status to failed for ${jobId} because queue is down`,
         error
       );
-      await updateStatus(jobId, 'failed');
+      await updateStatus(jobId, 'failed', error.message);
       throw new Error('Could not connect to queue');
     }
 
@@ -266,9 +267,9 @@ export async function addTestFromAPI(
   dockerContainer
 ) {
   // The number of objects to keep in the queue before removal
-  const removeOnComplete = nconf.get('queue:removeOnComplete') || 200;
-  const removeOnFail = nconf.get('queue:removeOnFail') || 400;
-  const attempts = nconf.get('queue:attempts') || 1;
+  const removeOnComplete = nconf.get('queue:removeOnComplete') || 50;
+  const removeOnFail = nconf.get('queue:removeOnFail') || 100;
+  const attempts = nconf.get('queue:attempts') || 2;
 
   const deviceId =
     get(userConfig, 'browsertime.firefox.android.deviceSerial') ||
@@ -276,7 +277,7 @@ export async function addTestFromAPI(
 
   const defaultConfig = await getDefaultSitespeedConfiguration();
   let config = {};
-  merge(config, defaultConfig, userConfig);
+  safeMerge(config, defaultConfig, userConfig);
 
   const slug = get(config, 'slug', '');
   let queue = getQueueName(location, deviceId);
@@ -329,7 +330,7 @@ export async function addTestFromAPI(
       `Setting status to failed for ${jobId} because queue is down`,
       error
     );
-    await updateStatus(jobId, 'failed');
+    await updateStatus(jobId, 'failed', error.message);
     throw new Error('Could not connect to queue');
   }
 

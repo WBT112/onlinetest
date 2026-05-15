@@ -2,6 +2,7 @@ import http from 'node:http';
 import { createSecureServer } from 'node:http2';
 
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
 import express from 'express';
 import helmet from 'helmet';
@@ -96,12 +97,39 @@ function setupExpressServer() {
   app.set('view engine', 'pug');
   app.set('views', path.resolve(getBaseFilePath('./views')));
 
+  // Make the server version available to every pug render so the
+  // theme CSS / admin CSS link tags can stamp a `?v=…` cache-buster
+  // on their hrefs. The classic-script tags on the standalone-compare
+  // pages stamp themselves at build time; the templated pug pages
+  // need an in-process equivalent.
+  const require = createRequire(import.meta.url);
+  app.locals.serverVersion = require('../package.json').version;
+
   app.enable('view cache');
 
+  // HSTS uses helmet's default (max-age=15552000; includeSubDomains). It is
+  // a no-op for plain-HTTP deployments and prevents downgrade attacks for
+  // HTTPS ones. CSP is transitional: inline <script> blocks still live in
+  // many pug templates, so 'unsafe-inline' stays for now — but external
+  // script loads and other cross-origin fetches are blocked. Tighten this
+  // policy once the inline scripts are extracted into /js files.
   app.use(
     helmet({
-      contentSecurityPolicy: false, // Disable CSP
-      hsts: false // Disable HTTP Strict Transport Security
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:'],
+          fontSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'"],
+          frameAncestors: ["'none'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"]
+        }
+      }
     })
   );
 
@@ -195,18 +223,48 @@ export class WebServer {
         key: fs.readFileSync(nconf.get('server:ssl:key')),
         cert: fs.readFileSync(nconf.get('server:ssl:cert'))
       };
-      const server = createSecureServer(sslOptions, this.app);
-      server.listen(port, () => {
+      this.server = createSecureServer(sslOptions, this.app);
+      this.server.listen(port, () => {
         logger.info('Web app listening on HTTPS :%s', port);
       });
     } else {
-      http.createServer(this.app).listen(port, () => {
+      this.server = http.createServer(this.app);
+      this.server.listen(port, () => {
         logger.info('Web app listening on :%s', port);
       });
     }
   }
 
+  // Stop accepting new connections and wait for in-flight requests to
+  // finish. If they don't finish within `server.shutdown.timeoutMs`, force
+  // the remaining sockets closed so the process can actually exit on a
+  // rolling restart.
   async stop() {
-    await this.app.close();
+    if (!this.server) return;
+    const timeoutMs =
+      nconf.any('server:shutdown:timeoutMs', 'server:shutdown:timeoutms') ??
+      30_000;
+    logger.info('Closing HTTP server (drain timeout %d ms)', timeoutMs);
+    await new Promise(resolve => {
+      let timer = setTimeout(() => {
+        timer = undefined;
+        logger.warn(
+          'Drain timeout hit; force-closing remaining HTTP connections'
+        );
+        if (typeof this.server.closeAllConnections === 'function') {
+          this.server.closeAllConnections();
+        }
+      }, timeoutMs);
+      this.server.close(error => {
+        if (timer) clearTimeout(timer);
+        if (error) {
+          logger.error('Error while closing HTTP server', error);
+        } else {
+          logger.info('HTTP server closed');
+        }
+        resolve();
+      });
+    });
+    this.server = undefined;
   }
 }

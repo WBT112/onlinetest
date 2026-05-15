@@ -5,6 +5,11 @@ server:
   ssl:
     key:
     cert:
+  # On SIGTERM/SIGINT the HTTP server stops accepting new connections and
+  # waits this many milliseconds for in-flight requests to finish. After
+  # the timeout it force-closes remaining sockets so the process can exit.
+  shutdown:
+    timeoutMs: 30000
 
 # Configure the log.
 log:
@@ -13,6 +18,12 @@ log:
 # Make sure only users with the correct key can add tests
 api:
   key:
+  # If true, the API key (configured above) is also required to read HAR and
+  # browsertime result data via /api/har/:id and /api/result/:id. Default is
+  # false to preserve the historical public-results behaviour. The key can be
+  # supplied via the X-API-Key header or the `api.key` query parameter.
+  # The status endpoint stays open because the GUI's running page polls it.
+  protectReads: false
 
 # Regular expression that needs to match the domain that you test. If there's a miss match, no tests will run.
 validTestDomains: "^(?:[\\w-]+\\.)*wikipedia\\.org$"
@@ -32,6 +43,11 @@ search:
   showLabel: true
 ## Configure the GUI
 html:
+  ## Visual theme. Two designs ship in the box:
+  ##   "console" — engineering-grade light/dark dashboard (IBM Plex)
+  ##   "memphis" — playful pastel sticker-style (Familjen Grotesk + Archivo Black + Caveat)
+  ## Default: console.
+  theme: console
   css:
     override:
   logo:
@@ -79,10 +95,14 @@ admin:
 
 # The number of jobs to keep in the queue
 # Depending on how many jobs you run and how much memory
-# you have on your Redis/KeyDb instance you can tune this
+# you have on your Redis/KeyDb instance you can tune this.
+# attempts controls how many times Bull will re-run a failed
+# job before giving up — 2 catches a single flaky network blip
+# without doubling load when a runner is truly broken.
 queue:
   removeOnComplete: 50
-  removeOnFail: 50
+  removeOnFail: 100
+  attempts: 2
 
 
 # The default sitspeed.io configuration file that will be merged to all tests.

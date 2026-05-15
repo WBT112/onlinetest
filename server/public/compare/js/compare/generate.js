@@ -1,4 +1,4 @@
-/* global getLastTiming, removeAndHide, perfCascade, createUpload, getAllDomains, hideUpload, changeOpacity, objectPropertiesToArray, registerTemplateHelpers, parseTemplate, getTotalDiff, generateVisualProgress, formatDate, getUniqueRequests, getFilmstrip */
+/* global getLastTiming, removeAndHide, createUpload, getAllDomains, hideUpload, objectPropertiesToArray, registerTemplateHelpers, parseTemplate, getTotalDiff, generateVisualProgress, formatDate, getUniqueRequests, getFilmstrip, compareWaterfall, renderShareControls */
 /* exported showUpload, formatDate, generate, toggleRow, regenerate, formatTime, showLoading*/
 
 /**
@@ -11,73 +11,100 @@ function regenerate(switchHar) {
   const e2 = document.getElementById('run2Option');
   const runIndex = e ? e.options[e.selectedIndex].value : 0;
   const runIndex2 = e2 ? e2.options[e2.selectedIndex].value : 0;
+  const prev = window.har || {};
+  // Carry per-HAR metadata (url) and top-level config (title,
+  // firstParty, stripVersion, comments) across a Switch / run change.
+  // Without this, the share UI would flip from "Copy share link" to
+  // "Download bundle" the moment the user toggled anything.
   generate({
     har1: {
-      har: switchHar ? window.har.har2.har : window.har.har1.har,
+      har: switchHar ? prev.har2.har : prev.har1.har,
       run: switchHar ? runIndex2 : runIndex,
-      label: switchHar ? window.har.har2.label : window.har.har1.label
+      label: switchHar ? prev.har2.label : prev.har1.label,
+      url: switchHar ? prev.har2.url : prev.har1.url
     },
     har2: {
-      har: switchHar ? window.har.har1.har : window.har.har2.har,
+      har: switchHar ? prev.har1.har : prev.har2.har,
       run: switchHar ? runIndex : runIndex2,
-      label: switchHar ? window.har.har1.label : window.har.har2.label
-    }
+      label: switchHar ? prev.har1.label : prev.har2.label,
+      url: switchHar ? prev.har1.url : prev.har2.url
+    },
+    title: prev.title,
+    firstParty: prev.firstParty,
+    stripVersion: prev.stripVersion,
+    comments: prev.comments
   });
 }
 
 /**
- * Add perfcascade waterfall
- * @param {*} har
- * @param {*} selectedPage
- * @param {*} waterfallDivId
- * @param {*} legendHolderEl
- * @param {*} maxTime
+ * Render one waterfall into #<waterfallDivId> using waterfall-tools.
+ * Pass the same `maxTime` (ms) for both HARs in the pair so the
+ * stacked panels share a time axis.
  */
-function addWaterfall(
-  har,
-  selectedPage,
-  waterfallDivId,
-  legendHolderEl,
-  maxTime
-) {
-  const perfCascadeSvg = perfCascade.fromHar(har, {
-    rowHeight: 23,
-    showAlignmentHelpers: false,
-    showIndicatorIcons: false,
-    showMimeTypeIcon: true,
-    leftColumnWidth: 30,
-    selectedPage: selectedPage,
-    legendHolder: legendHolderEl,
-    fixedLengthMs: maxTime
-  });
-
+function addWaterfall(har, selectedPage, waterfallDivId, maxTime) {
   const outputHolder = document.getElementById(waterfallDivId);
-  outputHolder.appendChild(perfCascadeSvg);
+  if (!outputHolder) return Promise.resolve();
+  return compareWaterfall.render(har, outputHolder, {
+    endTimeMs: maxTime,
+    runIndex: selectedPage
+  });
 }
 
-function addVisualProgress(pageXray1, pageXray2, config) {
-  if (
-    pageXray1.visualMetrics &&
-    pageXray1.visualMetrics.VisualProgress &&
-    pageXray2.visualMetrics &&
-    pageXray2.visualMetrics.VisualProgress
-  ) {
-    parseTemplate(
-      'visualProgressTemplate',
-      {
-        p1: pageXray1,
-        p2: pageXray2,
-        config
-      },
-      'visualProgressContent'
-    );
+// Down-sample a filmstrip down to a small set of evenly-spaced frames
+// for the under-chart thumbnail strip; the dense version still lives
+// in the dedicated Filmstrip section below.
+function sampleFrames(frames, count) {
+  if (!frames || frames.length === 0) return [];
+  if (frames.length <= count) return frames.slice();
+  const step = (frames.length - 1) / (count - 1);
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(frames[Math.round(i * step)]);
+  return out;
+}
 
-    generateVisualProgress(
-      pageXray1.visualMetrics.VisualProgress,
-      pageXray2.visualMetrics.VisualProgress,
-      'visualProgress'
-    );
+function addVisualProgress(pageXray1, pageXray2, config, filmstrip) {
+  if (
+    !pageXray1.visualMetrics ||
+    !pageXray1.visualMetrics.VisualProgress ||
+    !pageXray2.visualMetrics ||
+    !pageXray2.visualMetrics.VisualProgress
+  ) return;
+
+  parseTemplate(
+    'visualProgressTemplate',
+    { p1: pageXray1, p2: pageXray2, config },
+    'visualProgressContent'
+  );
+
+  // Marker timings — vertical guide lines on the chart anchor the
+  // comparison in time so "when did this happen?" is answerable at
+  // a glance. We pick the standard set: First Visual Change, FCP,
+  // LCP and Speed Index. Each marker is per-HAR so a regressed LCP
+  // shows up as two side-by-side red lines rather than one.
+  function markerSet(p) {
+    const vm = p.visualMetrics || {};
+    const gw = p.googleWebVitals || {};
+    return [
+      { label: 'FVC',         time: vm.FirstVisualChange,            kind: 'fvc' },
+      { label: 'FCP',         time: gw.firstContentfulPaint,         kind: 'fcp' },
+      { label: 'LCP',         time: gw.largestContentfulPaint,       kind: 'lcp' },
+      { label: 'Speed Index', time: vm.SpeedIndex,                   kind: 'si'  }
+    ].filter(function (m) { return typeof m.time === 'number' && m.time > 0; });
   }
+
+  generateVisualProgress(
+    pageXray1.visualMetrics.VisualProgress,
+    pageXray2.visualMetrics.VisualProgress,
+    'visualProgress',
+    {
+      thumbnails1: filmstrip ? sampleFrames(filmstrip.frames1, 6) : [],
+      thumbnails2: filmstrip ? sampleFrames(filmstrip.frames2, 6) : [],
+      label1:      config.har1.label,
+      label2:      config.har2.label,
+      markers1:    markerSet(pageXray1),
+      markers2:    markerSet(pageXray2)
+    }
+  );
 }
 
 /**
@@ -154,36 +181,38 @@ function generate(config) {
     'resultHeaderContent'
   );
 
-  if (
-    pageXray1.meta &&
-    pageXray1.meta.filmstrip &&
-    pageXray1.meta.filmstrip.length > 0 &&
-    pageXray2.meta &&
-    pageXray2.meta.filmstrip &&
-    pageXray2.meta.filmstrip.length > 0
-  ) {
-    const filmstrip = getFilmstrip(pageXray1, pageXray2);
+  const filmstrip = getFilmstrip(
+    config.har1.har,
+    config.har1.run,
+    config.har2.har,
+    config.har2.run
+  );
+  if (filmstrip) {
     parseTemplate(
       'filmstripTemplate',
-      {
-        config,
-        filmstrip1: filmstrip.filmstrip1,
-        filmstrip2: filmstrip.filmstrip2
-      },
+      { config: config, filmstrip: filmstrip },
       'filmstripContent'
     );
   }
 
-  parseTemplate(
-    'waterfallTemplate',
-    {
-      config
-    },
-    'waterfallContent'
-  );
-  // Hack for settimng correct opacity
-  document.getElementById('range').value = 0;
-  changeOpacity(0, 'har1', 'har2');
+  // Slider labels for the blend control. Both waterfalls are rendered
+  // into the same area on the same time axis; the slider blends har2
+  // over har1.
+  const label1 = document.getElementById('har1Label');
+  const label2 = document.getElementById('har2Label');
+  if (label1) label1.textContent = config.har1.label;
+  if (label2) label2.textContent = config.har2.label;
+
+  // Reset the slider to 0 (show HAR1 fully) when (re)generating.
+  const slider = document.getElementById('harBlendSlider');
+  if (slider) slider.value = 0;
+  blendWaterfalls(0);
+  // Restore the user's saved side-by-side / overlay preference now
+  // that the waterfall DOM is populated. No-op when the wrapper is
+  // missing (e.g. during the loading view).
+  if (typeof applyWaterfallLayoutPreference === 'function') {
+    applyWaterfallLayoutPreference();
+  }
 
   parseTemplate(
     'pageXrayTemplate',
@@ -213,23 +242,10 @@ function generate(config) {
     'pageXrayContent'
   );
 
-  const legendHolderEl = document.getElementById('waterfallLegendHolder');
-  addWaterfall(
-    config.har1.har,
-    config.har1.run,
-    'har1',
-    legendHolderEl,
-    slowestHarTiming
-  );
-  addWaterfall(
-    config.har2.har,
-    config.har2.run,
-    'har2',
-    legendHolderEl,
-    slowestHarTiming
-  );
+  addWaterfall(config.har1.har, config.har1.run, 'har1', slowestHarTiming);
+  addWaterfall(config.har2.har, config.har2.run, 'har2', slowestHarTiming);
 
-  addVisualProgress(pageXray1, pageXray2, config);
+  addVisualProgress(pageXray1, pageXray2, config, filmstrip);
 
   if (Object.keys(pageXray1.firstParty).length > 0) {
     parseTemplate(
@@ -288,4 +304,11 @@ function generate(config) {
 
   createUpload('har1upload');
   createUpload('har2upload');
+
+  // Render/refresh the share affordance now that window.har is set.
+  // Guarded so a missing share.js (e.g. embedded usage) is a no-op
+  // rather than a hard error.
+  if (typeof renderShareControls === 'function') {
+    renderShareControls();
+  }
 }

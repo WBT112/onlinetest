@@ -44,7 +44,7 @@ npm version "$VERSION" --no-git-tag-version
 npm publish
 
 cd "${ROOT_DIR}"
-git add server/package.json testrunner/package.json
+git add server/package.json server/npm-shrinkwrap.json testrunner/package.json testrunner/npm-shrinkwrap.json
 git commit -m "Release v$VERSION"
 git push
 

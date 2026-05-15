@@ -7,14 +7,21 @@ import {
   onMessage,
   processJob,
   getExistingQueue,
+  getExistingQueueNames,
   addDeviceToQueue
 } from './queuehandler.js';
-import { addTestRunner, removeTestRunner } from './testrunners.js';
+import {
+  addTestRunner,
+  removeTestRunner,
+  touchTestRunner,
+  pruneStaleTestRunners
+} from './testrunners.js';
 import {
   testConnection,
   updateStatus,
   updateTest,
-  getTest
+  getTest,
+  getStaleActiveTestIds
 } from './database/index.js';
 import DatabaseHelper from './database/databasehelper.js';
 import { testsCompletedTotal, testsFailedTotal } from './metrics.js';
@@ -25,8 +32,100 @@ async function setActiveStatus(jobid) {
   return updateStatus(jobid, 'active');
 }
 
-async function setFailedStatus(jobid) {
-  return updateStatus(jobid, 'failed');
+async function setFailedStatus(jobid, error) {
+  // Bull's global:failed event passes the failedReason string as the
+  // second argument — persist it so /admin can show why the job died
+  // even after Bull evicts the failed job per `removeOnFail`.
+  return updateStatus(jobid, 'failed', error);
+}
+
+async function setStalledStatus(jobid) {
+  // Bull moved this job from active back to wait because its lock
+  // expired (testrunner died mid-run). Mirror that in the DB so
+  // /search and /result stop showing the row as 'active' while the
+  // retry is queued — Bull will retry, and the next global:active /
+  // global:failed will write the final state. We do *not* mark it
+  // 'failed' here: a successful retry shouldn't leave a phantom
+  // failure in the 24h count.
+  return updateStatus(jobid, 'waiting');
+}
+
+// Cadence for the stale-active reconcile pass. Runs every 60 s, only
+// touching rows older than RECONCILE_GRACE_MINUTES so we never race a
+// freshly-active job whose `setActiveStatus` event is in flight.
+const RECONCILE_INTERVAL_MS = 60_000;
+const RECONCILE_GRACE_MINUTES = 5;
+
+// Catches stale active rows the global:stalled handler missed —
+// typically because the server was down when Bull fired the event,
+// so no listener was attached. Walks every `status='active'` row
+// older than the grace window, asks Bull what state the job is
+// actually in, and rewrites the DB to match. If Bull no longer has
+// the job at all (evicted by removeOnFail/removeOnComplete after a
+// completion we never recorded), we mark the row failed with an
+// explicit reason so it stops haunting /search.
+async function reconcileStaleActiveRows() {
+  const queueNames = getExistingQueueNames();
+  if (queueNames.length === 0) return;
+
+  const staleIds = await getStaleActiveTestIds(RECONCILE_GRACE_MINUTES);
+  if (staleIds.length === 0) return;
+
+  for (const id of staleIds) {
+    let job;
+    for (const queueName of queueNames) {
+      const queue = getExistingQueue(queueName);
+      if (!queue) continue;
+      try {
+        const candidate = await queue.getJob(id);
+        if (candidate) {
+          job = candidate;
+          break;
+        }
+      } catch (error) {
+        logger.error(
+          'Reconcile: error querying queue %s for job %s: %s',
+          queueName,
+          id,
+          error.message
+        );
+      }
+    }
+
+    if (!job) {
+      logger.info(
+        'Reconcile: %s is no longer in the queue, marking failed',
+        id
+      );
+      await updateStatus(id, 'failed', 'Reconciled: job no longer in queue');
+      continue;
+    }
+
+    let state;
+    try {
+      state = await job.getState();
+    } catch (error) {
+      logger.error('Reconcile: getState for %s failed: %s', id, error.message);
+      continue;
+    }
+
+    if (state === 'active') continue;
+
+    logger.info('Reconcile: %s Bull state is %s, updating DB', id, state);
+    if (state === 'failed') {
+      await updateStatus(
+        id,
+        'failed',
+        job.failedReason || 'Reconciled: queue state was failed'
+      );
+    } else if (state === 'completed') {
+      await updateStatus(id, 'completed');
+    } else {
+      // waiting / delayed / paused — Bull will run it again, mirror
+      // its current resting state instead of inventing one.
+      await updateStatus(id, 'waiting');
+    }
+  }
 }
 
 function setupLogging() {
@@ -42,7 +141,8 @@ async function setupResultQueue() {
       job.data.runTime,
       job.data.result.pageSummaryUrl,
       job.data.result.browsertime,
-      job.data.result.har
+      job.data.result.har,
+      job.data.failedReason
     );
 
     const test = await getTest(job.data.id);
@@ -65,8 +165,13 @@ async function setupTestRunnerQueue() {
   // Create the queue that handle testrunners
   processJob('testrunners', async job => {
     return new Promise(resolve => {
-      // The testrunner can send two different messages; either that the
-      // queue is starting or that the queue is shutting down.
+      // The testrunner can send three message types: start (new runner is
+      // up), stop (graceful shutdown) and heartbeat (still here). A runner
+      // that misses heartbeats long enough gets pruned server-side.
+      if (job.data.type === 'heartbeat') {
+        touchTestRunner(job.data.hostname);
+        return resolve();
+      }
       if (job.data.type === 'start') {
         logger.info(
           'Got a new testrunner %s : %j',
@@ -83,6 +188,7 @@ async function setupTestRunnerQueue() {
           if (!queue) {
             onMessage(queueName, 'global:active', setActiveStatus);
             onMessage(queueName, 'global:failed', setFailedStatus);
+            onMessage(queueName, 'global:stalled', setStalledStatus);
             addDeviceToQueue(
               setup.deviceId,
               job.data.serverConfig.name,
@@ -131,16 +237,56 @@ export class SitespeedioServer {
       throw error;
     }
 
-    const webserver = new WebServer();
-    await webserver.start();
+    this.webserver = new WebServer();
+    await this.webserver.start();
     await setupTestRunnerQueue();
     await setupResultQueue();
+    // Periodically prune testrunners that have stopped heartbeating —
+    // crashes / OOM kills / host reboots never emit a graceful stop, so
+    // without this they'd stay registered forever and the metrics would
+    // lie.
+    this.pruneTimer = setInterval(pruneStaleTestRunners, 60_000);
+    this.pruneTimer.unref();
+    // Reconcile DB rows that were left at status='active' by a
+    // testrunner that died before its global:stalled event reached
+    // us — typically because the server itself was restarting at
+    // the same time, so no listener was attached. The grace window
+    // inside the helper avoids racing freshly-active jobs.
+    this.reconcileTimer = setInterval(
+      () =>
+        reconcileStaleActiveRows().catch(error =>
+          logger.error('Reconcile pass failed: %s', error.message)
+        ),
+      RECONCILE_INTERVAL_MS
+    );
+    this.reconcileTimer.unref();
     // Tell the world that we are starting
     await publish('server', 'start');
   }
 
   async stop() {
     logger.info('Closing down server');
+
+    if (this.pruneTimer) {
+      clearInterval(this.pruneTimer);
+      this.pruneTimer = undefined;
+    }
+
+    if (this.reconcileTimer) {
+      clearInterval(this.reconcileTimer);
+      this.reconcileTimer = undefined;
+    }
+
+    // Stop accepting new HTTP requests and drain the in-flight ones before
+    // we tear down the database pool — otherwise a request mid-query will
+    // hit a closed pool and 500 just before the process exits.
+    if (this.webserver) {
+      try {
+        await this.webserver.stop();
+      } catch (error) {
+        logger.error('Error during HTTP server shutdown', error);
+      }
+    }
 
     // Close the queues?
 

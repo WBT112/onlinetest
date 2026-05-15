@@ -45,8 +45,9 @@ All services (Redis, PostgreSQL, MinIO, the sitespeed.io server, testrunner, and
 
 7. **Start everything:**
     ```bash
-    docker compose -f deploy/docker-compose.production.yml up -d
+    ./deploy/update.sh --mode all-in-one
     ```
+    Equivalent to `docker compose -f deploy/docker-compose.production.yml pull && docker compose -f deploy/docker-compose.production.yml up -d`. The script also tails container logs for 10 seconds so first-boot errors land in your terminal.
 
 Make sure your DNS points `yourdomain.com` to the server's IP. Caddy will automatically obtain a TLS certificate from Let's Encrypt on first request.
 
@@ -73,7 +74,7 @@ Run one testrunner per machine for stable results.
 
 2. **Start the server and dependencies:**
     ```bash
-    docker compose -f deploy/docker-compose.production-server.yml up -d
+    ./deploy/update.sh --mode server
     ```
 
 This exposes:
@@ -117,28 +118,44 @@ You will want to put a reverse proxy (Caddy, nginx, etc.) in front of port 3000 
     git checkout <release-tag>
     ```
 
-2. **Create a `.env` file** with the connection details for the server machine:
+2. **Create a `.env` file** by copying `.env.example` and editing the values for the server machine you're pointing at:
+    ```bash
+    cp .env.example .env
+    ```
+    Then in `.env`, change at minimum:
     ```
     REDIS_HOST=<server-machine-ip>
     REDIS_PASSWORD=<same-password-as-server>
-    SITESPEED_IO_TESTRUNNER_VERSION=2
-    LOCATION_NAME=default
-    SITESPEED_IO_CONTAINER=sitespeedio/sitespeed.io:39
+    POSTGRESQL_HOST=<server-machine-ip>            # not used by testrunner today, kept for consistency
     SITESPEED_IO_S3_ENDPOINT=http://<server-machine-ip>:9000
     MINIO_USER=sitespeedio
     MINIO_PASSWORD=<same-minio-password-as-server>
+    LOCATION_NAME=<unique-per-testrunner>
     RESULT_BASE_URL=https://yourdomain.com/sitespeedio
     ```
+    Every variable in `.env.example` is documented in-file; only the ones above need changing on a fresh testrunner box.
 
 3. **Start the testrunner:**
     ```bash
-    docker compose -f deploy/docker-compose.production-testrunner.yml up -d
+    ./deploy/update.sh --mode testrunner
     ```
 
 4. **Enable network throttling (Linux only):**
     ```bash
     sudo modprobe ifb numifbs=1
     ```
+
+### Adding a third (or Nth) testrunner
+
+Each testrunner machine follows the same recipe as the first — clone the repo, write the same `.env` (point at the same `REDIS_HOST`, share the same `REDIS_PASSWORD`/`MINIO_*` secrets), then `docker compose -f deploy/docker-compose.production-testrunner.yml up -d`. The only thing that **must** differ between machines is `LOCATION_NAME` (or, on Android farms, the `deviceId` in `testrunner/config/testrunner.yaml`).
+
+Don't forget the iptables/firewall step: the server machine needs to accept Redis (6379), PostgreSQL (5432) and MinIO (9000) traffic from each new testrunner IP. Repeat the `ACCEPT` rules from the lock-down step for every additional runner.
+
+A few minutes after a runner boots it should appear under **Connected testrunners** on `/admin` with a green "fresh" badge. If it doesn't show up:
+
+- **Nothing in the table** — the testrunner couldn't reach Redis. Check `REDIS_HOST`/`REDIS_PASSWORD` and the firewall.
+- **Row shows up but stays "stale"** — the runner registered once but stopped heartbeating. Check the testrunner logs for Redis errors.
+- **Server logs `Testrunner queue collision: <hostA> and <hostB> both claim queue <name>`** — two runners chose the same `LOCATION_NAME` (plus `deviceId`, on Android). Bull hands work to whichever machine wins the race; results from one run can come from either host. Fix it by giving the new machine a unique `LOCATION_NAME` and restarting.
 
 ### Reverse proxy examples
 
@@ -294,21 +311,21 @@ services:
 
 ## Updating
 
-To update to a new version:
+Run the helper script with the mode that matches the host:
 
-1. Pull new images:
-    ```bash
-    docker compose -f <your-compose-file> pull
-    ```
-
-2. Restart:
-    ```bash
-    docker compose -f <your-compose-file> up -d
-    ```
-
-To update to a new major version of the server/testrunner, change the version tags in `.env`:
-
+```bash
+./deploy/update.sh --mode all-in-one   # single-server (Caddy host)
+./deploy/update.sh --mode server       # multi-server, server box
+./deploy/update.sh --mode testrunner   # multi-server, testrunner box
 ```
-SITESPEED_IO_SERVER_VERSION=2
-SITESPEED_IO_TESTRUNNER_VERSION=2
+
+It pulls the latest images, runs `docker compose up -d --remove-orphans`, prints container status, and tails logs for 10 seconds.
+
+To move to a new major release of the server/testrunner, pass `--version`:
+
+```bash
+./deploy/update.sh --mode server --version 3.4.0
+./deploy/update.sh --mode testrunner --version 3.4.0
 ```
+
+This rewrites `SITESPEED_IO_SERVER_VERSION` and `SITESPEED_IO_TESTRUNNER_VERSION` in `.env` to `3.4.0` before pulling.

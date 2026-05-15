@@ -115,16 +115,16 @@ There's a regular expression that validates the domain of the URL that you want 
 
 ### Update sitespeed.io version
 By default latest major release of sitespeed.io is configured, it looks like this in the **.env** file:
-`SITESPEED_IO_CONTAINER="sitespeedio/sitespeed.io:39"`
+`SITESPEED_IO_CONTAINER="sitespeedio/sitespeed.io:41"`
 
-When 40 is released you just switch to:
-`SITESPEED_IO_CONTAINER="sitespeedio/sitespeed.io:40"`
+When 42 is released you just switch to:
+`SITESPEED_IO_CONTAINER="sitespeedio/sitespeed.io:42"`
 
-To get latest version of 39 you need to periodically pull down the version:
-```docker pull sitespeedio/sitespeed.io:39```
+To get latest version of 41 you need to periodically pull down the version:
+```docker pull sitespeedio/sitespeed.io:41```
 
 If you want to run a specific version, you can pin the version to a specific version:
-`SITESPEED_IO_CONTAINER="sitespeedio/sitespeed.io:39.0.0"`
+`SITESPEED_IO_CONTAINER="sitespeedio/sitespeed.io:41.0.0"`
 
 #### Access the result
 Running on your own machine the result is served from localhost. If you deploy on a server you want to change that:
@@ -137,8 +137,8 @@ By default the result is served by [MinIO](https://min.io) on port 9000. If you 
 You can configure which version of the server and the testrunner you want to use. You can either use latest stable version or specify a specific tag. In the *.env* file you configure which Docker tag to use.
 
 ```
-SITESPEED_IO_SERVER_VERSION=2
-SITESPEED_IO_TESTRUNNER_VERSION=2
+SITESPEED_IO_SERVER_VERSION=3
+SITESPEED_IO_TESTRUNNER_VERSION=3
 ```
 
 ### Secure the API with a key
@@ -227,6 +227,20 @@ The setup is split into three compose files ([docker-compose.dependencies.yml](h
 * **A Test Result Storage**: - Somewhere to store test results. The default setup uses [MinIO](https://min.io), an open source implementation of S3 but you can use all the result storages that work with sitespeed.io: S3, Google Cloud Storage or your own storage where you can scp the result.
 
 Additionally, there's a server and one or multiple test runners that run the sitespeed.io tests.
+
+## Keeping the CLI picker in sync
+
+The "command line" tab on the start page has a searchable picker of every sitespeed.io flag, sourced from `server/public/sitespeed-help.json`. Regenerate it whenever sitespeed.io ships a new version:
+
+```bash
+# pipe --help from any sitespeed.io binary you have
+sitespeed.io --help | node release/update-cli-help.cjs -
+
+# or, with no install handy, the script will fetch it via npx
+node release/update-cli-help.cjs
+```
+
+If you cut sitespeed.io releases yourself and have onlinetest checked out as a sibling at `../onlinetest`, sitespeed.io's own `release.sh` will detect it after each release and run this script automatically — just remember to commit the resulting `server/public/sitespeed-help.json`.
 
 ## Setup for production
 For production deployments (with HTTPS, multi-server setups, and more), see [PRODUCTION.md](deploy/PRODUCTION.md).

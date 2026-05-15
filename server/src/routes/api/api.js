@@ -3,15 +3,25 @@ import { getLogger } from '@sitespeed.io/log';
 
 import { createRequire } from 'node:module';
 
-import { getConfigByTestId } from '../../configs.js';
-import { getQueueById } from '../../queuehandler.js';
+import get from 'lodash.get';
+
+import { getConfigByTestId, setConfigById } from '../../configs.js';
+import {
+  getQueueById,
+  getDeviceQueue,
+  getExistingQueue,
+  setIdAndQueue
+} from '../../queuehandler.js';
 import {
   getTest,
   getTestHar,
   getTestBrowsertime
 } from '../../database/index.js';
 
-import { validateKey } from '../../middleware/validatekey.js';
+import {
+  validateKey,
+  validateKeyForReads
+} from '../../middleware/validatekey.js';
 import { validateURL } from '../../middleware/validateurl.js';
 import { validateParameters } from '../../middleware/validateparameters.js';
 
@@ -46,54 +56,83 @@ api.get('/testRunners', async function (request, response) {
 /**
  * Get the HAR file for a test.
  */
-api.get('/har/:testId', async function (request, response) {
-  const id = request.params.testId;
-  const har = await getTestHar(id);
-  return har
-    ? response.json(har.har)
-    : response.status(404).json({
-        id: id,
-        message: 'There are no HAR for test id ' + id
-      });
-});
+api.get(
+  '/har/:testId',
+  validateKeyForReads,
+  async function (request, response) {
+    const id = request.params.testId;
+    const har = await getTestHar(id);
+    return har
+      ? response.json(har.har)
+      : response.status(404).json({
+          id: id,
+          message: 'There are no HAR for test id ' + id
+        });
+  }
+);
 
 /**
  * Get the browsertime result JSON for a completed test.
  */
-api.get('/result/:testId', async function (request, response) {
-  const id = request.params.testId;
-  const row = await getTestBrowsertime(id);
-  return row
-    ? response.json(row.browsertime_result)
-    : response.status(404).json({
-        id: id,
-        message: 'There is no result for test id ' + id
-      });
-});
+api.get(
+  '/result/:testId',
+  validateKeyForReads,
+  async function (request, response) {
+    const id = request.params.testId;
+    const row = await getTestBrowsertime(id);
+    return row
+      ? response.json(row.browsertime_result)
+      : response.status(404).json({
+          id: id,
+          message: 'There is no result for test id ' + id
+        });
+  }
+);
 
 /**
  * Get the status of a test
  */
 api.get('/status/:testId', async function (request, response) {
   const id = request.params.testId;
-  const workQueue = getQueueById(id);
+  let workQueue = getQueueById(id);
   if (!workQueue) {
-    // if we don't have a queue for a test someone possible is trying to get
-    // an old result, lets check the database
+    // Cache miss: recover the queue from the DB row so we can still
+    // stream logs from Bull instead of returning an empty stub.
     const testResult = await getTest(id);
-    return testResult
-      ? response.json({
-          status: testResult.status,
-          logs: [],
-          url: testResult.url,
-          scriptingName: testResult.scripting_name,
-          message: '',
-          result: testResult.status === 'completed' ? testResult.result_url : ''
-        })
-      : response.status(400).json({
-          id: id,
-          message: getText('error.validation.nomatchingtestwithid', id)
-        });
+    if (!testResult) {
+      return response.status(400).json({
+        id: id,
+        message: getText('error.validation.nomatchingtestwithid', id)
+      });
+    }
+    const deviceId =
+      get(
+        testResult,
+        'configuration.browsertime.chrome.android.deviceSerial'
+      ) ||
+      get(testResult, 'configuration.browsertime.firefox.android.deviceSerial');
+    const queueName = getDeviceQueue(deviceId, testResult.location);
+    const derivedQueue = queueName ? getExistingQueue(queueName) : undefined;
+    if (derivedQueue) {
+      setIdAndQueue(id, derivedQueue);
+      setConfigById(
+        id,
+        testResult.url,
+        testResult.scripting_name,
+        testResult.configuration,
+        queueName
+      );
+      workQueue = derivedQueue;
+    } else {
+      return response.json({
+        status: testResult.status,
+        logs: [],
+        url: testResult.url,
+        scriptingName: testResult.scripting_name,
+        message: '',
+        result: testResult.status === 'completed' ? testResult.result_url : ''
+      });
+    }
   }
   const job = await workQueue.getJob(id);
 

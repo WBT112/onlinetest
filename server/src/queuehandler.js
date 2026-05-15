@@ -117,6 +117,80 @@ export async function getQueueSize(name) {
   return queue.count();
 }
 
+// Full job-counts view: waiting / active / failed / delayed / completed /
+// paused. The admin page uses waiting+active+failed; the other fields come
+// for free in the same Bull call so we expose them all.
+export async function getQueueCounts(name) {
+  const queue = getQueue(name);
+  try {
+    return await queue.getJobCounts();
+  } catch {
+    return {
+      waiting: 0,
+      active: 0,
+      failed: 0,
+      delayed: 0,
+      completed: 0,
+      paused: 0
+    };
+  }
+}
+
+// Active jobs across a queue, capped so the admin call can't pull
+// thousands of records on a runaway. The job objects Bull returns are
+// heavy — the caller is expected to project only what it needs.
+export async function getActiveJobs(name, limit = 20) {
+  const queue = getQueue(name);
+  try {
+    return await queue.getActive(0, limit - 1);
+  } catch {
+    return [];
+  }
+}
+
+// Most-recently-failed jobs from a queue. Bull keeps up to
+// `queue:removeOnFail` failures (defaults to 50, configurable in
+// server.yaml). The caller is expected to sort by `finishedOn` after
+// merging across queues.
+export async function getFailedJobs(name, limit = 20) {
+  const queue = getQueue(name);
+  try {
+    return await queue.getFailed(0, limit - 1);
+  } catch {
+    return [];
+  }
+}
+
+// Re-enqueue a previously-failed job via Bull's built-in retry. Returns
+// true on success, false if the job no longer exists or isn't in a
+// failed state (someone already retried it, or removeOnFail evicted it
+// between page render and click).
+export async function retryFailedJob(queueName, jobId) {
+  const queue = getQueue(queueName);
+  try {
+    const job = await queue.getJob(jobId);
+    if (!job) return false;
+    const state = await job.getState();
+    if (state !== 'failed') return false;
+    await job.retry();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Cheap health probe. Any open Bull queue exposes its underlying ioredis
+// client; status 'ready' means the connection is up and authenticated.
+// We pick the first connected queue — if none exist yet (very first
+// request after boot, before any testrunner has registered) we fall back
+// to 'unknown' rather than lying with 'down'.
+export function isRedisHealthy() {
+  for (const queue of Object.values(queues)) {
+    if (queue.client && queue.client.status === 'ready') return true;
+  }
+  return false;
+}
+
 export function getExistingQueue(name) {
   return queues[name];
 }

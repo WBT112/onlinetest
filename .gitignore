@@ -1,4 +1,5 @@
 node_modules/
 sitespeed-result/
+.claude
 .env
 .DS_Store

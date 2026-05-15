@@ -1,4 +1,4 @@
-/* exported showUpload, formatDate, formatURL, toggleRow, hideUpload, objectPropertiesToArray, formatTime, showLoading, errorMessage, formatBytes, changeOpacity*/
+/* exported showUpload, formatDate, formatURL, toggleRow, hideUpload, objectPropertiesToArray, formatTime, showLoading, errorMessage, formatBytes, blendWaterfalls, toggleDiffOnly, toggleWaterfallLayout, applyWaterfallLayoutPreference */
 
 // Hide the upload functionality
 function hideUpload() {
@@ -17,8 +17,11 @@ function removeAndHide() {
   removeChildren('har1');
   removeChildren('har2');
   removeChildren('pageXrayContent');
+  removeChildren('filmstripContent');
   removeChildren('thirdPartyContent');
   removeChildren('visualProgressContent');
+  removeChildren('requestDiffContent');
+  removeChildren('domainsContent');
   hide('result');
   hide('loading');
 }
@@ -87,7 +90,11 @@ function formatURL(url) {
 function formatTime(ms) {
   if (ms !== undefined) {
     if (ms < 1000) {
-      return ms + ' ms';
+      // Round to whole milliseconds. Chrome's HAR timings are already
+      // integer ms for the page-level metrics (FCP/LCP/etc.), but
+      // browsertime's recalculateStyle field reports sub-ms precision
+      // ("17.099 ms") that's noise at this scale.
+      return Math.round(ms) + ' ms';
     } else {
       return Number(ms / 1000).toFixed(3) + ' s';
     }
@@ -110,20 +117,83 @@ function formatBytes(bytes) {
     return Number(bytes / MB).toFixed(1) + ' MB';
   }
 }
-function changeOpacity(val, id1, id2) {
-  const el1 = document.getElementById(id1);
-  const el2 = document.getElementById(id2);
-  el2.style.opacity = val;
-  el1.style.opacity = Math.abs(1 - val);
-
-  // make sure we can see the extra info
-  if (val > 0.5) {
-    el1.style['z-index'] = -1;
-    el2.style['z-index'] = 1;
-  } else {
-    el1.style['z-index'] = 1;
-    el2.style['z-index'] = -1;
+// Blend the HAR1/HAR2 waterfall canvases. 0 = show HAR1, 1 = show HAR2,
+// in-between values cross-fade them. Both canvases render on the same
+// time axis (via waterfall-tools' shared endTime option) so the bars
+// line up visually as the slider moves.
+function blendWaterfalls(value) {
+  const v = Math.min(1, Math.max(0, Number(value) || 0));
+  const har1 = document.getElementById('har1');
+  const har2 = document.getElementById('har2');
+  if (har1) {
+    har1.style.opacity = 1 - v;
+    // Whichever HAR is more visible gets the mouse — its hover handler
+    // shows the request URL tooltip set up in waterfall-tools-overrides.
+    har1.style.pointerEvents = v > 0.5 ? 'none' : 'auto';
   }
+  if (har2) {
+    har2.style.opacity = v;
+    har2.style.pointerEvents = v > 0.5 ? 'auto' : 'none';
+  }
+}
+
+// Toggle between blended-overlay waterfall (default) and a
+// side-by-side rendering. Blending is great for spotting moved
+// requests but bad for "which row belongs to which HAR?". Persists
+// the choice across reloads.
+//
+// blendWaterfalls() sets inline opacity / pointer-events on the
+// canvas divs — those inline styles override any CSS we write —
+// so we have to clear them when entering side-by-side and re-apply
+// blend(0) when leaving, otherwise HAR2 stays invisible.
+function setWaterfallSideBySide(on) {
+  const wrapper = document.querySelector('.harwrapper');
+  const blendBox = document.getElementById('harBlendWrapper');
+  const btn = document.getElementById('waterfallLayoutToggle');
+  if (wrapper) wrapper.classList.toggle('harwrapper--side-by-side', on);
+  if (blendBox) blendBox.style.display = on ? 'none' : '';
+  if (btn) btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+
+  const har1 = document.getElementById('har1');
+  const har2 = document.getElementById('har2');
+  if (on) {
+    if (har1) { har1.style.opacity = ''; har1.style.pointerEvents = ''; }
+    if (har2) { har2.style.opacity = ''; har2.style.pointerEvents = ''; }
+  } else {
+    // Restore overlay defaults so the slider and blend math line up.
+    const slider = document.getElementById('harBlendSlider');
+    blendWaterfalls(slider ? slider.value : 0);
+  }
+}
+
+function applyWaterfallLayoutPreference() {
+  let on = false;
+  try { on = localStorage.getItem('compare.waterfallSideBySide') === '1'; }
+  catch (e) { /* localStorage blocked */ }
+  setWaterfallSideBySide(on);
+}
+
+function toggleWaterfallLayout(btn) {
+  const wrapper = document.querySelector('.harwrapper');
+  if (!wrapper) return;
+  const on = !wrapper.classList.contains('harwrapper--side-by-side');
+  setWaterfallSideBySide(on);
+  try { localStorage.setItem('compare.waterfallSideBySide', on ? '1' : '0'); }
+  catch (e) { /* localStorage blocked */ }
+}
+
+// "Only show differences" toggle for the page-x-ray table — hides
+// rows whose Δ cell renders "no change", so a long metric list
+// collapses to just the things that actually moved. Persists the
+// choice so the page comes back the way the user left it.
+function toggleDiffOnly(btn) {
+  const table = document.querySelector('.pageXrayTable');
+  if (!table) return;
+  const on = !table.classList.contains('pageXrayTable--diff-only');
+  table.classList.toggle('pageXrayTable--diff-only', on);
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  try { localStorage.setItem('compare.diffOnly', on ? '1' : '0'); }
+  catch (e) { /* localStorage blocked — preference is in-memory only */ }
 }
 
 function toggleRow(element, className, toggler) {
