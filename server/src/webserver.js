@@ -26,6 +26,7 @@ import { BasicAuth } from './middleware/basicauth.js';
 import { error404, error500 } from './middleware/errorhandler.js';
 import { setupStatic } from './static/index.js';
 import { getBaseFilePath } from './util/fileutil.js';
+import { isScriptingAllowed } from './util/scripting.js';
 import { register, httpRequestDuration, httpRequestsTotal } from './metrics.js';
 
 const logger = getLogger('sitespeedio.server');
@@ -104,39 +105,48 @@ function setupExpressServer() {
   // need an in-process equivalent.
   const require = createRequire(import.meta.url);
   app.locals.serverVersion = require('../package.json').version;
+  app.locals.isScriptingAllowed = isScriptingAllowed;
 
   app.enable('view cache');
 
   // HSTS uses helmet's default (max-age=15552000; includeSubDomains). It is
   // a no-op for plain-HTTP deployments and prevents downgrade attacks for
-  // HTTPS ones. CSP is transitional: inline <script> blocks still live in
-  // many pug templates, so 'unsafe-inline' stays for now — but external
-  // script loads and other cross-origin fetches are blocked. Tighten this
-  // policy once the inline scripts are extracted into /js files.
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        useDefaults: false,
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          // Compare HARs carry absolute URLs to the screenshots, filmstrip
-          // frames and video on the originating sitespeed.io result server
-          // (`_meta.screenshot` / `_meta.filmstrip[].file` / `_meta.video`).
-          // Allow any HTTPS origin for those media types so cross-origin
-          // result servers render instead of showing empty image/video slots.
-          imgSrc: ["'self'", 'data:', 'https:'],
-          mediaSrc: ["'self'", 'https:'],
-          fontSrc: ["'self'", 'data:'],
-          connectSrc: ["'self'"],
-          frameAncestors: ["'none'"],
-          objectSrc: ["'none'"],
-          baseUri: ["'self'"],
-          formAction: ["'self'"]
-        }
-      }
-    })
+  // HTTPS ones. The pug templates load all their JavaScript from /js, so
+  // scripts must come from this server: inline scripts and inline event
+  // handlers do not run.
+  const cspDirectives = {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    // Compare HARs carry absolute URLs to the screenshots, filmstrip
+    // frames and video on the originating sitespeed.io result server
+    // (`_meta.screenshot` / `_meta.filmstrip[].file` / `_meta.video`).
+    // Allow any HTTPS origin for those media types so cross-origin
+    // result servers render instead of showing empty image/video slots.
+    imgSrc: ["'self'", 'data:', 'https:'],
+    mediaSrc: ["'self'", 'https:'],
+    fontSrc: ["'self'", 'data:'],
+    connectSrc: ["'self'"],
+    frameAncestors: ["'none'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"]
+  };
+  const appHelmet = helmet({
+    contentSecurityPolicy: { useDefaults: false, directives: cspDirectives }
+  });
+  // The vendored compare app still has inline scripts and handlers. It
+  // keeps 'unsafe-inline' until the compare project removes them.
+  const compareHelmet = helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: { ...cspDirectives, scriptSrc: ["'self'", "'unsafe-inline'"] }
+    }
+  });
+  app.use((request, response, next) =>
+    request.path === '/compare' || request.path.startsWith('/compare/')
+      ? compareHelmet(request, response, next)
+      : appHelmet(request, response, next)
   );
 
   if (
@@ -168,6 +178,11 @@ function setupExpressServer() {
   );
 
   if (adminLogin != undefined && adminPassword != undefined) {
+    if (adminPassword === '' || String(adminPassword).startsWith('CHANGE_ME')) {
+      logger.warn(
+        'The /admin password is empty or still the example value from .env.example. Change ADMIN_BASICAUTH_PASSWORD.'
+      );
+    }
     const adminAuth = new BasicAuth(
       adminLogin,
       adminPassword,
@@ -179,7 +194,9 @@ function setupExpressServer() {
       adminAuth.authenticate(request, response, next)
     );
   } else {
-    logger.warn('Running /admin without basic auth');
+    logger.warn(
+      'Running /admin without basic auth. Anyone can open /admin and empty the queues. Set ADMIN_BASICAUTH_LOGIN and ADMIN_BASICAUTH_PASSWORD in .env.'
+    );
   }
 
   app.use(
@@ -199,6 +216,10 @@ function setupExpressServer() {
     logger.info('Disabling search');
   } else {
     app.use('/search', search);
+  }
+
+  if (!nconf.get('api:key')) {
+    logger.warn('No api.key is set, the API will not accept new tests');
   }
 
   app.use('/admin', admin);
